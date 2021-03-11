@@ -22,9 +22,9 @@ type airDropConfig struct {
 
 type airDropManager struct {
 	config     *airDropConfig
-	addrList   map[common.Address]*big.Int
+	amountMap  map[common.Address]*big.Int
 	totalSyUSD *big.Int
-	rewardList map[common.Address]*big.Float
+	rewardMap  map[common.Address]*big.Float
 
 	client          *ethclient.Client
 
@@ -64,9 +64,9 @@ func NewManager() *airDropManager {
 
 	s:= &airDropManager{
 		config:     config,
-		addrList:   make(map[common.Address]*big.Int),
+		amountMap:  make(map[common.Address]*big.Int),
 		totalSyUSD: new(big.Int),
-		rewardList: make(map[common.Address]*big.Float),
+		rewardMap:  make(map[common.Address]*big.Float),
 		client:     client,
 	}
 	s.calTokenPerSecond()
@@ -84,14 +84,14 @@ func (s *airDropManager)UpdateToken(log types.Log)  {
 		changedAddr=to
 	}
 
-	if _,ok:=s.addrList[changedAddr];!ok{
-		s.addrList[changedAddr]=new(big.Int)
+	if _,ok:=s.amountMap[changedAddr];!ok{
+		s.amountMap[changedAddr]=new(big.Int)
 	}
 	if isMint{
-		s.addrList[changedAddr].Add(s.addrList[changedAddr],amount)
+		s.amountMap[changedAddr].Add(s.amountMap[changedAddr],amount)
 		s.totalSyUSD.Add(s.totalSyUSD,amount)
 	}else{
-		s.addrList[changedAddr].Sub(s.addrList[changedAddr],amount)
+		s.amountMap[changedAddr].Sub(s.amountMap[changedAddr],amount)
 		s.totalSyUSD.Sub(s.totalSyUSD,amount)
 	}
 }
@@ -110,16 +110,14 @@ func (s *airDropManager)calTokenPerSecond()  {
 }
 
 func (s *airDropManager) airDrop(ts uint64)  {
-	needToken:=new(big.Float).Mul(new(big.Float).SetUint64(ts),s.amountPreSecond)
-	preToken:=new(big.Float).Quo(needToken,new(big.Float).SetInt(s.totalSyUSD))
+	tokenInTurn :=new(big.Float).Mul(new(big.Float).SetUint64(ts),s.amountPreSecond)
+	preToken:=new(big.Float).Quo(tokenInTurn,new(big.Float).SetInt(s.totalSyUSD))
 
-	for addr,value:=range s.addrList {
-		tt:=new(big.Float).Mul(new(big.Float).SetInt(value),preToken)
-
-		if _,ok:=s.rewardList[addr];!ok{
-			s.rewardList[addr]=new(big.Float)
+	for addr,value:=range s.amountMap {
+		if _,ok:=s.rewardMap[addr];!ok{
+			s.rewardMap[addr]=new(big.Float)
 		}
-		s.rewardList[addr].Add(s.rewardList[addr],tt)
+		s.rewardMap[addr].Add(s.rewardMap[addr],new(big.Float).Mul(new(big.Float).SetInt(value),preToken))
 	}
 }
 
@@ -143,7 +141,7 @@ func (r RewardList)Swap(i,j int)  {
 
 func (s *airDropManager)genRewardFile()  {
 	rs:=make(RewardList,0)
-	for addr,value:=range s.rewardList{
+	for addr,value:=range s.rewardMap {
 		r:=reward{
 			Addr:  addr,
 		}
@@ -164,7 +162,7 @@ func (s *airDropManager)genRewardFile()  {
 
 func (s *airDropManager)display()  {
 	nonZeroAmount:=0
-	for _,v:=range s.addrList {
+	for _,v:=range s.amountMap {
 		if v.Uint64()!=0{
 			nonZeroAmount++
 		}
@@ -172,13 +170,13 @@ func (s *airDropManager)display()  {
 
 
 	realReward :=new(big.Float)
-	for _,v:=range s.rewardList {
+	for _,v:=range s.rewardMap {
 		realReward.Add(realReward,v)
 	}
 
 	fmt.Println("空投计算完毕")
 	fmt.Printf("   syUSD总数量:%d, 持有syUSD账户数量:%d\n",s.totalSyUSD,nonZeroAmount)
-	fmt.Printf("   空投账户数:%d, 预期空投数量:%d, 实际空投总金额:%f\n",len(s.rewardList),s.config.AirDropAmount, realReward)
+	fmt.Printf("   空投账户数:%d, 预期空投数量:%d, 实际空投总金额:%f\n",len(s.rewardMap),s.config.AirDropAmount, realReward)
 }
 
 func main()  {
